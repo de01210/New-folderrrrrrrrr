@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Workout Tracker — Day Tracker</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b2236;--muted:#9fb3c8;--accent:#8b5cf6;--accent-2:#06b6d4;--glass: rgba(255,255,255,0.04);--success:#10b981}
+    *{box-sizing:border-box;font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071024 0%, #071a2a 100%);color:#e6f0f6}
+    .app{max-width:980px;margin:28px auto;padding:20px;border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    h1{font-size:20px;margin:0}
+    .controls{display:flex;gap:8px;align-items:center}
+    button{background:var(--glass);border:1px solid rgba(255,255,255,0.04);padding:8px 12px;border-radius:10px;color:var(--muted);cursor:pointer}
+    button.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:white;border:none}
+    .main{display:grid;grid-template-columns:1fr 340px;gap:18px;margin-top:18px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
+
+    /* Calendar */
+    .calendar{display:grid;grid-template-rows:auto auto 1fr;gap:8px}
+    .month-row{display:flex;align-items:center;justify-content:space-between}
+    .weekday-row{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;color:var(--muted);font-size:12px}
+    .days-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+    .day{min-height:74px;padding:6px;border-radius:8px;background:transparent;border:1px dashed rgba(255,255,255,0.02);position:relative}
+    .day .date-num{font-weight:600}
+    .day.workout{background:linear-gradient(180deg, rgba(139,92,246,0.12), rgba(6,182,212,0.06));border:1px solid rgba(139,92,246,0.15);box-shadow:0 4px 18px rgba(6,182,212,0.04)}
+    .day.today{outline:2px solid rgba(255,255,255,0.06)}
+    .day .dot{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);width:8px;height:8px;border-radius:50%;background:var(--accent)}
+
+    /* Right panel */
+    .panel{display:flex;flex-direction:column;gap:12px}
+    .stats{display:flex;gap:8px}
+    .stat{flex:1;padding:10px;border-radius:10px;background:rgba(255,255,255,0.02);text-align:center}
+    .stat .label{font-size:12px;color:var(--muted)}
+    .stat .value{font-size:18px;font-weight:700}
+
+    .list{max-height:360px;overflow:auto;padding:6px;display:flex;flex-direction:column;gap:8px}
+    .list .entry{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.02)}
+
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:linear-gradient(180deg, rgba(2,6,23,0.6), rgba(2,6,23,0.6));z-index:50}
+    .modal.show{display:flex}
+    .modal .modal-card{width:420px;background:#011826;padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
+    label{display:block;margin-top:8px;color:var(--muted);font-size:13px}
+    input[type=text],textarea,select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    textarea{min-height:80px}
+    .small{font-size:13px;color:var(--muted)}
+
+    /* Login overlay */
+    .login-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg, rgba(1,6,10,0.85), rgba(1,6,10,0.85));z-index:100}
+    .login-card{width:420px;background:#021923;padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.04)}
+    .user-row{display:flex;gap:8px;align-items:center;justify-content:space-between}
+    .account-list{max-height:120px;overflow:auto;margin-top:8px;display:flex;flex-direction:column;gap:6px}
+    .account-item{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02)}
+
+    footer{margin-top:14px;color:var(--muted);font-size:13px;text-align:center}
+
+    @media (max-width:880px){.main{grid-template-columns:1fr}.panel{order:2}}
+  </style>
+</head>
+<body>
+  <div class="app" role="application">
+    <header>
+      <div>
+        <h1>Workout Tracker</h1>
+        <div class="small">Mark days you worked out, track streaks, save exercises.</div>
+      </div>
+      <div class="controls">
+        <button id="exportBtn">Export</button>
+        <button id="importBtn">Import</button>
+        <input id="fileInput" type="file" accept="application/json" style="display:none" />
+        <button id="clearAll">Clear</button>
+        <button id="logoutBtn" style="display:none">Logout</button>
+      </div>
+    </header>
+
+    <div class="main">
+      <section class="card calendar" aria-label="calendar">
+        <div class="month-row">
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="prevMonth">◀</button>
+            <div id="monthLabel" style="min-width:180px;text-align:center;font-weight:700"></div>
+            <button id="nextMonth">▶</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="todayBtn" class="primary">Today</button>
+          </div>
+        </div>
+
+        <div class="weekday-row">
+          <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+        </div>
+
+        <div id="daysGrid" class="days-grid" aria-hidden="false"></div>
+      </section>
+
+      <aside class="card panel">
+        <div class="stats">
+          <div class="stat">
+            <div class="label">Total Days Marked</div>
+            <div id="totalDays" class="value">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Current Streak</div>
+            <div id="currentStreak" class="value">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Longest Streak</div>
+            <div id="longestStreak" class="value">0</div>
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px">
+            <div style="font-weight:700">Recent Workouts</div>
+            <div id="quickToday" class="small">Click a day to edit</div>
+          </div>
+          <div class="list" id="recentList"></div>
+        </div>
+
+        <div>
+          <button id="addQuick" class="primary">Quick Mark Today</button>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="small">Save is automatic to your browser. You can export/import JSON to backup or move devices.</footer>
+  </div>
+
+  <!-- Modal for editing a day -->
+  <div id="modal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong id="modalTitle">Edit Day</strong>
+        <button id="closeModal">✖</button>
+      </div>
+
+      <div id="modalDate" class="small" style="margin-top:6px"></div>
+
+      <label>Did you work out?</label>
+      <select id="didWorkout">
+        <option value="yes">Yes</option>
+        <option value="no">No</option>
+      </select>
+
+      <label>Exercises (comma separated)</label>
+      <input id="exercisesInput" type="text" placeholder="Pushups, Squats, Run" />
+
+      <label>Notes</label>
+      <textarea id="notesInput" placeholder="Any notes..."></textarea>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button id="deleteDay">Delete</button>
+        <button id="saveDay" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Overlay -->
+  <div id="loginOverlay" class="login-overlay" aria-hidden="false">
+    <div class="login-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>Sign in — Offline</strong>
+        <div class="small">Your accounts stay in this device only</div>
+      </div>
+
+      <div style="margin-top:10px">
+        <label>Existing accounts</label>
+        <div id="accountList" class="account-list"></div>
+      </div>
+
+      <div style="margin-top:8px">
+        <label>Create / Login</label>
+        <input id="usernameInput" type="text" placeholder="Username (no spaces)" />
+        <input id="passwordInput" type="text" placeholder="Password / PIN" style="margin-top:8px" />
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="createBtn">Create account</button>
+          <button id="loginBtn" class="primary">Login</button>
+        </div>
+      </div>
+
+      <div class="small" style="margin-top:10px;color:var(--muted)">Tip: This is an offline sign-in. If you clear browser data you will lose accounts.</div>
+    </div>
+  </div>
+
+  <script>
+    // Storage keys
+    const USERS_KEY = 'workoutUsers_v1'; // stores account metadata (no strong encryption)
+    const SELECTED_USER = 'workoutSelectedUser_v1';
+
+    // App state per user
+    let state = {days:{}};
+    let currentUser = null;
+
+    // Utils for dates
+    function todayDate(){ const d = new Date(); return toYMD(d); }
+    function toYMD(d){ const y = d.getFullYear(); const m = (d.getMonth()+1).toString().padStart(2,'0'); const day = d.getDate().toString().padStart(2,'0'); return `${y}-${m}-${day}`; }
+
+    // --- USER ACCOUNT FUNCTIONS ---
+    function loadUsers(){
+      try{ const raw = localStorage.getItem(USERS_KEY); return raw ? JSON.parse(raw) : {}; }
+      catch(e){ console.warn('loadUsers',e); return {}; }
+    }
+    function saveUsers(users){ localStorage.setItem(USERS_KEY, JSON.stringify(users)); }
+
+    function saveSelectedUser(username){ localStorage.setItem(SELECTED_USER, username); }
+    function loadSelectedUser(){ return localStorage.getItem(SELECTED_USER); }
+
+    function hashSimple(s){ // simple hash to avoid storing plain password — not cryptographically secure but better than plain text
+      let h = 0; for(let i=0;i<s.length;i++){ h = (h<<5)-h + s.charCodeAt(i); h |= 0; } return String(h);
+    }
+
+    function createAccount(username, password){
+      if(!username || username.includes(' ')) return {ok:false,msg:'Invalid username'};
+      const users = loadUsers();
+      if(users[username]) return {ok:false,msg:'Username exists'};
+      users[username] = {pw: hashSimple(password), created: new Date().toISOString()};
+      saveUsers(users);
+      // create empty data for user
+      saveUserData(username, {days:{}});
+      return {ok:true};
+    }
+
+    function loginAccount(username, password){
+      const users = loadUsers();
+      if(!users[username]) return {ok:false,msg:'No such user'};
+      if(users[username].pw !== hashSimple(password)) return {ok:false,msg:'Wrong password'};
+      // load user's data
+      const data = loadUserData(username) || {days:{}};
+      currentUser = username;
+      state = data;
+      saveSelectedUser(username);
+      return {ok:true};
+    }
+
+    function saveUserData(username, data){
+      localStorage.setItem('workoutData_' + username, JSON.stringify(data));
+    }
+    function loadUserData(username){
+      try{ const raw = localStorage.getItem('workoutData_' + username); return raw ? JSON.parse(raw) : null; }
+      catch(e){ console.warn('loadUserData',e); return null; }
+    }
+
+    function deleteUser(username){
+      const users = loadUsers(); delete users[username]; saveUsers(users);
+      localStorage.removeItem('workoutData_' + username);
+      const sel = loadSelectedUser(); if(sel===username){ localStorage.removeItem(SELECTED_USER); }
+    }
+
+    // --- UI / Calendar code (mostly same as original) ---
+    let viewYear, viewMonth;
+    function loadState(){ /* now state is per-user; nothing here */ }
+    function saveState(){ if(currentUser) saveUserData(currentUser, state); }
+
+    function renderCalendar(year, month){
+      viewYear = year; viewMonth = month;
+      const daysGrid = document.getElementById('daysGrid'); daysGrid.innerHTML = '';
+      const label = document.getElementById('monthLabel');
+      const displayName = new Date(year,month,1).toLocaleString(undefined,{month:'long',year:'numeric'});
+      label.textContent = displayName;
+
+      const first = new Date(year, month, 1);
+      const startWeekday = first.getDay();
+      const daysInMonth = new Date(year, month+1, 0).getDate();
+      const prevDays = startWeekday;
+      const totalCells = Math.ceil((prevDays + daysInMonth) / 7) * 7;
+      const base = new Date(year, month, 1 - prevDays);
+      for(let i=0;i<totalCells;i++){
+        const d = new Date(base.getFullYear(), base.getMonth(), base.getDate()+i);
+        const ymd = toYMD(d);
+        const el = document.createElement('div'); el.className = 'day';
+        if(d.getMonth() !== month) el.style.opacity = '0.28';
+        if(ymd === todayDate()) el.classList.add('today');
+        if(state.days[ymd] && state.days[ymd].worked) el.classList.add('workout');
+        el.innerHTML = `<div class="date-num">${d.getDate()}</div>`;
+        if(state.days[ymd] && state.days[ymd].worked){ const dot = document.createElement('div'); dot.className='dot'; el.appendChild(dot); }
+        el.addEventListener('click',()=> openEditModal(ymd));
+        daysGrid.appendChild(el);
+      }
+      updateSidebar();
+    }
+
+    function updateSidebar(){
+      const dates = Object.keys(state.days).filter(k => state.days[k].worked).sort((a,b)=>b.localeCompare(a));
+      document.getElementById('totalDays').textContent = dates.length;
+      const streakInfo = computeStreaks(Object.keys(state.days).filter(k => state.days[k].worked));
+      document.getElementById('currentStreak').textContent = streakInfo.current;
+      document.getElementById('longestStreak').textContent = streakInfo.longest;
+      const list = document.getElementById('recentList'); list.innerHTML = '';
+      const recent = dates.slice(0,12);
+      recent.forEach(d=>{
+        const item = document.createElement('div'); item.className='entry';
+        const ex = (state.days[d].exercises||[]).join(', ');
+        item.innerHTML = `<div style="display:flex;justify-content:space-between"><strong>${d}</strong><div>${state.days[d].worked? '✅':'—'}</div></div><div class="small">${ex || state.days[d].notes || ''}</div>`;
+        item.addEventListener('click',()=> openEditModal(d));
+        list.appendChild(item);
+      });
+      saveState();
+    }
+
+    function computeStreaks(datesArr){
+      if(!datesArr.length) return {current:0,longest:0};
+      const set = new Set(datesArr);
+      const today = new Date();
+      let d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      let curCount = 0;
+      while(true){ const key = toYMD(d); if(set.has(key)){ curCount++; d.setDate(d.getDate()-1); } else break; }
+      let longest = 0; let streak = 0;
+      const sorted = Array.from(set).sort();
+      for(let i=0;i<sorted.length;i++){
+        if(i===0) streak = 1; else{
+          const prev = new Date(sorted[i-1]); const curr = new Date(sorted[i]); const diff = (curr - prev) / (1000*60*60*24);
+          if(diff === 1) streak++; else streak = 1;
+        }
+        if(streak>longest) longest = streak;
+      }
+      return {current:curCount, longest};
+    }
+
+    // Modal
+    const modal = document.getElementById('modal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalDate = document.getElementById('modalDate');
+    let editingDate = null;
+    function openEditModal(ymd){
+      editingDate = ymd; modal.classList.add('show'); modalTitle.textContent = 'Edit ' + ymd; modalDate.textContent = new Date(ymd).toDateString();
+      const data = state.days[ymd] || {worked:false,exercises:[],notes:''};
+      document.getElementById('didWorkout').value = data.worked ? 'yes' : 'no';
+      document.getElementById('exercisesInput').value = (data.exercises||[]).join(', ');
+      document.getElementById('notesInput').value = data.notes || '';
+    }
+
+    document.getElementById('closeModal').addEventListener('click',()=>{ modal.classList.remove('show'); editingDate=null; renderCalendar(viewYear, viewMonth); });
+    document.getElementById('saveDay').addEventListener('click',()=>{
+      if(!editingDate) return; const did = document.getElementById('didWorkout').value === 'yes'; const ex = document.getElementById('exercisesInput').value.split(',').map(s=>s.trim()).filter(Boolean); const notes = document.getElementById('notesInput').value.trim();
+      if(did){ state.days[editingDate] = {worked:true,exercises:ex,notes}; } else{ delete state.days[editingDate]; }
+      saveState(); modal.classList.remove('show'); editingDate = null; renderCalendar(viewYear, viewMonth);
+    });
+
+    document.getElementById('deleteDay').addEventListener('click',()=>{
+      if(editingDate && state.days[editingDate]){ delete state.days[editingDate]; saveState(); }
+      modal.classList.remove('show'); editingDate=null; renderCalendar(viewYear, viewMonth);
+    });
+
+    // Quick mark today
+    document.getElementById('addQuick').addEventListener('click',()=>{
+      if(!currentUser){ alert('Please sign in first'); return; }
+      const ymd = todayDate(); state.days[ymd] = state.days[ymd]||{}; state.days[ymd].worked = true; state.days[ymd].exercises = state.days[ymd].exercises || ['Quick workout']; saveState(); renderCalendar(viewYear, viewMonth);
+    });
+
+    // Navigation
+    document.getElementById('prevMonth').addEventListener('click',()=>{ const d = new Date(viewYear, viewMonth-1, 1); renderCalendar(d.getFullYear(), d.getMonth()); });
+    document.getElementById('nextMonth').addEventListener('click',()=>{ const d = new Date(viewYear, viewMonth+1, 1); renderCalendar(d.getFullYear(), d.getMonth()); });
+    document.getElementById('todayBtn').addEventListener('click',()=>{ const d = new Date(); renderCalendar(d.getFullYear(), d.getMonth()); });
+
+    // Export / import
+    document.getElementById('exportBtn').addEventListener('click',()=>{
+      if(!currentUser){ alert('Please sign in to export your data'); return; }
+      const blob = new Blob([JSON.stringify(state)], {type:'application/json'});
+      const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${currentUser}-workout-backup.json`; a.click(); URL.revokeObjectURL(url);
+    });
+    document.getElementById('importBtn').addEventListener('click',()=> document.getElementById('fileInput').click());
+    document.getElementById('fileInput').addEventListener('change',(e)=>{
+      const f = e.target.files[0]; if(!f) return; const reader = new FileReader(); reader.onload = ()=>{
+        try{ const data = JSON.parse(reader.result); state = data; saveState(); renderCalendar((new Date()).getFullYear(), (new Date()).getMonth()); alert('Imported!'); }
+        catch(err){ alert('Invalid file'); }
+      };
+      reader.readAsText(f);
+    });
+
+    document.getElementById('clearAll').addEventListener('click',()=>{
+      if(!currentUser){ alert('Please sign in'); return; }
+      if(confirm('Clear all saved data for this account? This cannot be undone.')){ state = {days:{}}; saveState(); renderCalendar((new Date()).getFullYear(), (new Date()).getMonth()); }
+    });
+
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click',()=>{
+      if(confirm('Logout?')){ currentUser = null; saveSelectedUser(''); document.getElementById('logoutBtn').style.display='none'; document.getElementById('loginOverlay').style.display='flex'; renderAccounts(); }
+    });
+
+    // Login overlay UI
+    function renderAccounts(){
+      const listEl = document.getElementById('accountList'); listEl.innerHTML='';
+      const users = loadUsers();
+      const names = Object.keys(users);
+      names.forEach(n=>{
+        const div = document.createElement('div'); div.className='account-item';
+        div.innerHTML = `<div>${n}</div><div style=\"display:flex;gap:6px\"><button data-name=\"${n}\" class=\"quickLogin\">Use</button><button data-name=\"${n}\" class=\"delUser\">Del</button></div>`;
+        listEl.appendChild(div);
+      });
+      // attach handlers
+      Array.from(document.getElementsByClassName('quickLogin')).forEach(b=> b.addEventListener('click', (e)=>{
+        const name = e.target.getAttribute('data-name'); const pw = prompt('Enter password/PIN for ' + name); if(pw!==null){ const r = loginAccount(name,pw); if(!r.ok) alert(r.msg); else afterLogin(); }
+      }));
+      Array.from(document.getElementsByClassName('delUser')).forEach(b=> b.addEventListener('click', (e)=>{
+        const name = e.target.getAttribute('data-name'); if(confirm('Delete user ' + name + ' and its local data?')){ deleteUser(name); renderAccounts(); }
+      }));
+    }
+
+    document.getElementById('createBtn').addEventListener('click',()=>{
+      const u = document.getElementById('usernameInput').value.trim(); const p = document.getElementById('passwordInput').value;
+      if(!u || !p){ alert('Enter username and password/PIN'); return; }
+      const r = createAccount(u,p); if(!r.ok) alert(r.msg); else { alert('Account created — you are now signed in'); loginAccount(u,p); afterLogin(); }
+    });
+
+    document.getElementById('loginBtn').addEventListener('click',()=>{
+      const u = document.getElementById('usernameInput').value.trim(); const p = document.getElementById('passwordInput').value;
+      if(!u || !p){ alert('Enter username and password'); return; }
+      const r = loginAccount(u,p); if(!r.ok) alert(r.msg); else { afterLogin(); }
+    });
+
+    function afterLogin(){ document.getElementById('loginOverlay').style.display='none'; document.getElementById('logoutBtn').style.display='inline-block'; renderCalendar((new Date()).getFullYear(), (new Date()).getMonth()); renderAccounts(); }
+
+    // init app: if selected user exists, try to auto-login (no password)
+    (function init(){
+      renderAccounts();
+      const sel = loadSelectedUser(); if(sel){ const data = loadUserData(sel); if(data){ currentUser = sel; state = data; document.getElementById('loginOverlay').style.display='none'; document.getElementById('logoutBtn').style.display='inline-block'; }
+      }
+      const now = new Date(); renderCalendar(now.getFullYear(), now.getMonth());
+    })();
+  </script>
+</body>
+</html>
